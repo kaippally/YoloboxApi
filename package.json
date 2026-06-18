@@ -1,0 +1,27 @@
+{
+  "name": "yolobox-relay-api",
+  "version": "1.0.0",
+  "description": "REST-to-WebSocket relay API for YoloBox Ultra control",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "yolobox",
+    "yololiv",
+    "websocket",
+    "relay",
+    "api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "dotenv": "^16.3.1",
+    "swagger-ui-express": "^5.0.0",
+    "swagger-jsdoc": "^6.2.8"
+  }
+}
