@@ -151,6 +151,26 @@ Convenience wrapper that switches the live scene by id (builds the `order_direct
 }
 ```
 
+#### `GET /api/scoreboard`
+Live-queries the device's `getScoreboardInfo`. Returns the two teams (`teamName`, `score`), the current `period`, the match timer (`timeSetting`), whether the scoreboard overlay is shown (`showScoreboard`), and its `type`. Available on firmware that ships the local Web Control UI.
+
+**Response (Success - 200):**
+```json
+{
+  "success": true,
+  "scoreboard": {
+    "showScoreboard": true,
+    "period": "First Half",
+    "type": 0,
+    "teams": [
+      { "teamName": "Team 1", "score": 0 },
+      { "teamName": "Team 2", "score": 0 }
+    ],
+    "timeSetting": { "isCountdown": false, "isPlaying": false, "seconds": 0, "showTime": false }
+  }
+}
+```
+
 #### `GET /api/health`
 Returns the current connection status of both WebSocket sockets.
 
@@ -185,7 +205,7 @@ This relay sets it automatically (`WS_ORIGIN`, configurable via env). There is a
 - **Host/port:** `ws://<YOLOBOX_IP>:8887`
 - **Path = action:** the endpoint path *is* the command, e.g. `/remote/controller/getDirectorList`
 - **Envelope:** responses are `{"code":200,"data":{...}}`. Read endpoints stream one JSON frame on connect.
-- **Web Control UI** is cloud-hosted at `http://web-control.yololiv.com/web-control` — there is **no** browsable page at the device's bare IP (port 80 is closed). The device serves 8080 (HTTP REST, e.g. `GET /remote/controller/getDeviceStatus`), 8887 (WebSocket), and 9090 (proprietary).
+- **Web Control UI.** Originally cloud-only at `http://web-control.yololiv.com/web-control`. Recent firmware also serves a **local** copy on the device at `http://<YOLOBOX_IP>:8081/web-control-detail.html` (phones are redirected to `/web-control-h5-detail.html`). Port 80 itself is still closed. The device serves 8080 (HTTP REST, e.g. `GET /remote/controller/getDeviceStatus`), 8081 (local Web Control UI), 8887 (WebSocket), and 9090 (proprietary). The local UI drives the box over the same `:8887` protocol documented here.
 
 ### Read endpoints (connect → receive one frame)
 
@@ -196,6 +216,7 @@ This relay sets it automatically (`WS_ORIGIN`, configurable via env). There is a
 | `/remote/controller/getMaterialList` | **Overlays** — `id` (`type=…&overlayId=…`), `isSelected`, preview `url` |
 | `/remote/controller/getMixerList` | **Audio** channels — `id`, `mixerName`, `volume`, `AFV`, `isSelected` |
 | `/remote/controller/getLiveStatus` | `living` (bool), `startTime` |
+| `/remote/controller/getScoreboardInfo` | **Scoreboard** — `teams` (`teamName`, `score`), `period`, `timeSetting` (`isCountdown`, `isPlaying`, `seconds`, `showTime`), `showScoreboard`, `type` |
 | `/remote/controller/heartbeat` | `{ "alive": true }` |
 
 **`getDirectorList` example:**

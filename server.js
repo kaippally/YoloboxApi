@@ -794,6 +794,53 @@ app.post('/api/live', async (req, res) => {
 
 /**
  * @swagger
+ * /api/scoreboard:
+ *   get:
+ *     summary: Get the current scoreboard state
+ *     description: Live-queries the device's getScoreboardInfo endpoint. Returns the two teams (teamName + score), the current period, the match timer (timeSetting), whether the scoreboard overlay is shown, and its type. Added in the firmware that ships the local Web Control UI.
+ *     responses:
+ *       200:
+ *         description: Scoreboard state retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 scoreboard:
+ *                   type: object
+ *                   properties:
+ *                     showScoreboard: { type: boolean, example: true }
+ *                     period: { type: string, example: "First Half" }
+ *                     type: { type: integer, example: 0 }
+ *                     teams:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           teamName: { type: string, example: "Team 1" }
+ *                           score: { type: integer, example: 0 }
+ *                     timeSetting:
+ *                       type: object
+ *                       properties:
+ *                         isCountdown: { type: boolean, example: false }
+ *                         isPlaying: { type: boolean, example: false }
+ *                         seconds: { type: integer, example: 0 }
+ *                         showTime: { type: boolean, example: false }
+ *       503:
+ *         description: Could not reach the device
+ */
+app.get('/api/scoreboard', async (_req, res) => {
+  try {
+    const { data: scoreboard, stale } = await cachedQuery('getScoreboardInfo');
+    res.json({ success: true, scoreboard, stale });
+  } catch (error) {
+    res.status(503).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * @swagger
  * /api/command:
  *   post:
  *     summary: Send a command to the YoloBox
