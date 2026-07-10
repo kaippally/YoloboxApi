@@ -28,6 +28,7 @@ let authReconnectTimer = null;
 let authRefreshTimer = null;
 let commandReconnectTimer = null;
 let statusReconnectTimer = null;
+let lastSocketError = null;
 
 // The device expires a freshly-authenticated session after ~10-15s and a
 // ws-level ping does NOT refresh it — only opening a new authenticate socket
@@ -132,6 +133,7 @@ function connectCommandSocket() {
   });
 
   commandSocket.on('error', (error) => {
+    lastSocketError = error.message;
     console.error('[Command Socket] Error:', error.message);
   });
 
@@ -184,6 +186,7 @@ function connectStatusSocket() {
   });
 
   statusSocket.on('error', (error) => {
+    lastSocketError = error.message;
     console.error('[Status Socket] Error:', error.message);
   });
 
@@ -967,11 +970,13 @@ app.get('/api/health', (_req, res) => {
 
   res.json({
     success: true,
+    device: `${YOLOBOX_IP}:${WS_PORT}`,
     authSocket: getSocketState(authSocket),
     authenticated,
     commandSocket: getSocketState(commandSocket),
     statusSocket: getSocketState(statusSocket),
     cachedStatusAvailable: cachedStatus !== null,
+    lastError: lastSocketError,
   });
 });
 
