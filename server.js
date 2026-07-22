@@ -751,7 +751,7 @@ app.get('/api/status', (_req, res) => {
  *         description: Device not reachable
  *   post:
  *     summary: Start or stop the live stream
- *     description: Sends an order_live_status command. Body `{ "status": "start" }` goes live, `{ "status": "stop" }` ends it. Omit `status` to toggle based on the current live state.
+ *     description: 'Sends an order_live_status command. Body `{ "status": "start" }` goes live, `{ "status": "stop" }` ends it. Omit `status` to toggle based on the current live state.'
  *     requestBody:
  *       content:
  *         application/json:
