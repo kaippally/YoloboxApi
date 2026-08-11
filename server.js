@@ -34,7 +34,26 @@ let lastSocketError = null;
 // ws-level ping does NOT refresh it — only opening a new authenticate socket
 // does. We re-authenticate well inside that window, make-before-break, so there
 // is always a live authorized session.
-const AUTH_REFRESH_MS = 8000;
+//
+// 8000 left only 2-7s of margin, and this stack runs at BelowNormal priority next
+// to OBS: a slipped timer is not hypothetical, it is the routine case under load,
+// and every slip past the lapse turns into "Device de-authorized (4000)". 5s halves
+// the exposure for one extra socket every 8s.
+const AUTH_REFRESH_MS = parseInt(process.env.YOLO_AUTH_REFRESH_MS || '5000', 10);
+
+// How old an authorization may be before a query is allowed to ride on it. Past
+// this we re-authenticate FIRST and wait for it, rather than opening a query
+// socket into a window the device has already closed.
+const AUTH_FRESH_MS = parseInt(process.env.YOLO_AUTH_FRESH_MS || '7000', 10);
+
+// When the device last accepted an authenticate. `authenticated` only says our
+// socket is still open, which is not the same thing — the firmware lets the socket
+// live on well after it has stopped honouring it. This is the timestamp that matters.
+let lastAuthorizedAt = 0;
+// Resolvers waiting for the in-flight authenticate to land, so N concurrent callers
+// share ONE handshake instead of each opening their own.
+let authWaiters = [];
+const settleAuthWaiters = (ok) => { const w = authWaiters; authWaiters = []; w.forEach((fn) => fn(ok)); };
 
 /**
  * Open an authenticate socket (/remote/controller/authenticate). This firmware
@@ -61,6 +80,8 @@ function connectAuthSocket() {
     const prev = authSocket;
     authSocket = next;
     authenticated = true;
+    lastAuthorizedAt = Date.now();
+    settleAuthWaiters(true);
     // Drop the superseded session only once the new one is up (make-before-break).
     if (prev && prev !== next) {
       prev._superseded = true;
@@ -90,9 +111,12 @@ function connectAuthSocket() {
         clearInterval(authRefreshTimer);
         authRefreshTimer = null;
       }
+      lastAuthorizedAt = 0;
+      settleAuthWaiters(false);
       console.log(`[Auth Socket] Live session dropped (code ${code}${reason?.length ? ` ${reason}` : ''}). Reconnecting...`);
       scheduleAuthReconnect();
     } else if (!opened && !authenticated) {
+      settleAuthWaiters(false);
       // A reconnect attempt that never opened (device unreachable). Must keep
       // retrying — otherwise the reconnect chain dies after a single failure
       // and the relay stays stuck unauthorized until a full process restart.
@@ -100,6 +124,29 @@ function connectAuthSocket() {
       scheduleAuthReconnect();
     }
   });
+}
+
+/**
+ * Resolve once the device has accepted a NEW authenticate (true) or the attempt
+ * failed (false). connectAuthSocket() only *starts* the handshake, so the old
+ * "kick it and sleep 350ms" retry regularly opened its query socket before the new
+ * session existed — three retries could burn inside one unauthorized window and all
+ * fail identically. Waiting on the real event is what makes the retry mean anything.
+ */
+function authenticateNow(timeoutMs = 4000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const settle = (ok) => { if (done) return; done = true; clearTimeout(t); resolve(ok); };
+    const t = setTimeout(() => settle(false), timeoutMs);
+    authWaiters.push(settle);
+    connectAuthSocket();
+  });
+}
+
+/** Authorization older than AUTH_FRESH_MS is not trusted — renew before using it. */
+async function ensureFreshAuth() {
+  if (authenticated && Date.now() - lastAuthorizedAt < AUTH_FRESH_MS) return true;
+  return authenticateNow();
 }
 
 function scheduleAuthReconnect() {
@@ -265,13 +312,19 @@ function queryEndpointOnce(endpoint, connectTimeoutMs = 6000, frameTimeoutMs = 6
  */
 async function queryEndpoint(endpoint, retries = 3, retryDelayMs = 350) {
   let lastErr;
+  // Renew a stale authorization BEFORE opening the query socket. The device
+  // authorizes each socket at open time, so an expired session is a guaranteed
+  // 4000 — cheaper to re-authenticate first than to fail and retry.
+  await ensureFreshAuth();
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       return await queryEndpointOnce(endpoint);
     } catch (err) {
       lastErr = err;
       if (!err.transient || attempt === retries) break;
-      connectAuthSocket(); // re-establish the auth session immediately
+      // WAIT for the new session to land. Kicking the handshake and sleeping a
+      // fixed 350ms let all three retries fall inside the same unauthorized window.
+      await authenticateNow();
       await new Promise((r) => setTimeout(r, retryDelayMs));
     }
   }
